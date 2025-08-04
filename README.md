@@ -14,8 +14,7 @@ A fun, interactive 3D ball pit simulation with realistic physics, collision dete
 
 ## Technologies Used
 
-- **HTML5**: Structure and markup
-- **CSS3**: Styling and animations
+- **HTML5**: Structure and markup with imbedded CSS for styling
 - **JavaScript (ES6+)**: Core application logic and physics
 - **Three.js (r128)**: 3D graphics library for WebGL rendering
 - **WebGL**: Hardware-accelerated 3D graphics
