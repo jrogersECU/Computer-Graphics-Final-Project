@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ball pit with collision</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #ffffff;
+            overflow: hidden;
+        }
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 100;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: transform 0.2s;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        #red-btn {
+            background: #ff0000;
+            color: white;
+        }
+        #blue-btn {
+            background: #0000ff;
+            color: white;
+        }
+        #yellow-btn {
+            background: #ffff00;
+            color: black;
+        }
+        #green-btn {
+            background: #00ff00;
+            color: black;
+        }
+        #erase-btn {
+            background: #666;
+            color: white;
+            margin-left: 10px;
+        }
+        #back-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: #333;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.3s;
+        }
+        #back-btn:hover {
+            background: #555;
+        }
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: #333;
+            font-size: 14px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    <div id="controls">
+        <button id="red-btn">Spawn Red</button>
+        <button id="blue-btn">Spawn Blue</button>
+        <button id="yellow-btn">Spawn Yellow</button>
+        <button id="green-btn">Spawn Green</button>
+        <button id="erase-btn">Erase All</button>
+    </div>
+    <a href="home.html" id="back-btn">Back to Landing</a>
+    <div id="instructions">
+        Click anywhere to enable sound | Move mouse to repel spheres | Use 'Erase All' button to clear
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Scene setup with white background
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xffffff);  // White background
+        
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        // Sound setup
+        const audioListener = new THREE.AudioListener();
+        camera.add(audioListener);
+        
+        // Create sound pool for better performance
+        const collisionSounds = [];
+        const numSounds = 5; // Create multiple sound instances
+        let currentSoundIndex = 0;
+
+        // Create synthetic collision sounds
+        function createSyntheticSound() {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            for (let i = 0; i < numSounds; i++) {
+                const sound = new THREE.Audio(audioListener);
+                const buffer = audioContext.createBuffer(1, 4410, 44100);
+                const data = buffer.getChannelData(0);
+                
+                // Create a simple click sound
+                for (let j = 0; j < 4410; j++) {
+                    data[j] = Math.sin(2 * Math.PI * j / 44100 * 400) * Math.exp(-j / 1000);
+                }
+                
+                sound.setBuffer(buffer);
+                sound.setVolume(0.3);
+                collisionSounds.push(sound);
+            }
+        }
+
+        // Create sounds on initialization
+        createSyntheticSound();
+
+        // Function to play collision sound
+        function playCollisionSound(intensity = 1.0) {
+            if (collisionSounds.length > 0 && !collisionSounds[currentSoundIndex].isPlaying) {
+                const sound = collisionSounds[currentSoundIndex];
+                sound.setVolume(0.2 + intensity * 0.3); // Adjust volume based on collision intensity
+                sound.setPlaybackRate(0.8 + Math.random() * 0.4); // Vary pitch slightly
+                sound.play();
+                currentSoundIndex = (currentSoundIndex + 1) % numSounds;
+            }
+        }
+
+        // Enhanced lighting system
+        scene.fog = new THREE.Fog(0xffffff, 10, 20);  // White fog to match background
+        
+        // Ambient light
+        const ambientLight = new THREE.AmbientLight(0x808080, 0.5);
+        scene.add(ambientLight);
+        
+        // Main directional light
+        const mainLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        mainLight.position.set(10, 20, 10);
+        mainLight.castShadow = true;
+        mainLight.shadow.mapSize.width = 2048;
+        mainLight.shadow.mapSize.height = 2048;
+        mainLight.shadow.camera.near = 0.5;
+        mainLight.shadow.camera.far = 100;
+        mainLight.shadow.camera.left = -20;
+        mainLight.shadow.camera.right = 20;
+        mainLight.shadow.camera.top = 20;
+        mainLight.shadow.camera.bottom = -20;
+        scene.add(mainLight);
+        
+        // Point light
+        const pointLight = new THREE.PointLight(0xffffff, 0.8, 15);
+        pointLight.position.set(0, 5, 0);
+        pointLight.castShadow = true;
+        scene.add(pointLight);
+        
+        // Secondary directional light for better illumination
+        const secondaryLight = new THREE.DirectionalLight(0x808080, 0.8);
+        secondaryLight.position.set(-10, 10, 10);
+        scene.add(secondaryLight);
+
+        // Create ground plane
+        const groundGeometry = new THREE.PlaneGeometry(30, 30);
+        const groundMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xe0e0e0,  // Light gray for contrast
+            roughness: 0.8,
+            metalness: 0.0
+        });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -5;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Camera position
+        camera.position.z = 10;
+
+        // Sphere configurations
+        const sphereConfigs = {
+            red: { color: 0xff0000, radius: 0.4, emission: 0.1, metalness: 0.7, roughness: 0.3 },
+            blue: { color: 0x0000ff, radius: 0.4, emission: 0.1, metalness: 0.7, roughness: 0.3 },
+            yellow: { color: 0xffff00, radius: 0.4, emission: 0.2, metalness: 0.5, roughness: 0.2 },
+            green: { color: 0x00ff00, radius: 0.4, emission: 0.1, metalness: 0.6, roughness: 0.3 }
+        };
+
+        // Sphere physics
+        const spheres = [];
+        const gravity = 0.002;
+        const repulsionForce = 0.3;
+        const friction = 0.99;
+        const maxVelocity = 0.15;
+        const groundLevel = -5;  // Y position of ground
+        const bounceAbsorption = 0.7;  // Energy retained after bounce
+
+        // Create sphere function
+        function createSphere(type) {
+            const config = sphereConfigs[type];
+            const geometry = new THREE.SphereGeometry(config.radius, 32, 32);
+            
+            const material = new THREE.MeshStandardMaterial({
+                color: config.color,
+                emissive: config.color,
+                emissiveIntensity: config.emission,
+                metalness: config.metalness,
+                roughness: config.roughness,
+                envMapIntensity: 1.0
+            });
+            
+            const sphere = new THREE.Mesh(geometry, material);
+            sphere.castShadow = true;
+            sphere.receiveShadow = true;
+            
+            // Random initial position
+            const angle = Math.random() * Math.PI * 2;
+            const distance = Math.random() * 4;
+            sphere.position.x = Math.cos(angle) * distance;
+            sphere.position.y = Math.sin(angle) * distance + 5;
+            sphere.position.z = (Math.random() - 0.5) * 4;
+            
+            // Physics properties
+            sphere.velocity = new THREE.Vector3(0, 0, 0);
+            sphere.acceleration = new THREE.Vector3(0, -0.005, 0);  // Gravity
+            sphere.type = type;
+            sphere.radius = config.radius;
+            
+            scene.add(sphere);
+            spheres.push(sphere);
+        }
+
+        // Button event listeners
+        document.getElementById('red-btn').addEventListener('click', () => createSphere('red'));
+        document.getElementById('blue-btn').addEventListener('click', () => createSphere('blue'));
+        document.getElementById('yellow-btn').addEventListener('click', () => createSphere('yellow'));
+        document.getElementById('green-btn').addEventListener('click', () => createSphere('green'));
+        document.getElementById('erase-btn').addEventListener('click', () => {
+            spheres.forEach(sphere => scene.remove(sphere));
+            spheres.length = 0;
+        });
+
+        // Mouse tracking
+        const mouse = new THREE.Vector2();
+        const raycaster = new THREE.Raycaster();
+        
+        function onMouseMove(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        }
+        window.addEventListener('mousemove', onMouseMove);
+
+        // Check ground collision
+        function handleGroundCollision(sphere) {
+            const bottomPosition = sphere.position.y - sphere.radius;
+            
+            if (bottomPosition <= groundLevel) {
+                const previousBottomPosition = (sphere.previousPosition?.y || sphere.position.y) - sphere.radius;
+                
+                // Check if this is a new collision (not already touching ground)
+                if (previousBottomPosition > groundLevel) {
+                    // Play ground collision sound
+                    const impactSpeed = Math.abs(sphere.velocity.y);
+                    playCollisionSound(Math.min(impactSpeed * 2, 1.0));
+                }
+                
+                sphere.position.y = groundLevel + sphere.radius;
+                
+                // Reverse and dampen vertical velocity
+                sphere.velocity.y = -sphere.velocity.y * bounceAbsorption;
+                
+                // Apply horizontal friction on ground contact
+                sphere.velocity.x *= 0.95;
+                sphere.velocity.z *= 0.95;
+                
+                // Stop very small bounces
+                if (Math.abs(sphere.velocity.y) < 0.01) {
+                    sphere.velocity.y = 0;
+                }
+            }
+        }
+
+        // Check collision between two spheres
+        function checkSphereCollision(sphere1, sphere2) {
+            const distance = sphere1.position.distanceTo(sphere2.position);
+            const minDistance = sphere1.radius + sphere2.radius;
+            
+            if (distance < minDistance) {
+                return true;
+            }
+            return false;
+        }
+
+        // Handle collision between two spheres
+        function handleSphereCollision(sphere1, sphere2) {
+            const distance = sphere1.position.distanceTo(sphere2.position);
+            const minDistance = sphere1.radius + sphere2.radius;
+            
+            if (distance < minDistance) {
+                // Calculate collision normal
+                const collisionNormal = sphere2.position.clone().sub(sphere1.position).normalize();
+                
+                // Separate spheres
+                const overlap = minDistance - distance;
+                const separationVector = collisionNormal.clone().multiplyScalar(overlap / 2);
+                sphere1.position.sub(separationVector);
+                sphere2.position.add(separationVector);
+                
+                // Calculate relative velocity
+                const relativeVelocity = sphere2.velocity.clone().sub(sphere1.velocity);
+                const speed = relativeVelocity.dot(collisionNormal);
+                
+                // If spheres are already moving apart, don't apply impulse
+                if (speed > 0) return;
+                
+                // Calculate collision impulse (assuming equal mass and elastic collision)
+                const restitution = 0.9; // Elasticity factor
+                const impulse = -(1 + restitution) * speed;
+                const impulseVector = collisionNormal.clone().multiplyScalar(impulse / 2);
+                
+                // Apply impulse to both spheres
+                sphere1.velocity.sub(impulseVector);
+                sphere2.velocity.add(impulseVector);
+                
+                // Play collision sound based on impact intensity
+                const collisionIntensity = Math.min(Math.abs(speed), 1.0);
+                playCollisionSound(collisionIntensity);
+            }
+        }
+
+        // Physics update with collision detection
+        function updatePhysics() {
+            raycaster.setFromCamera(mouse, camera);
+            
+            spheres.forEach(sphere => {
+                // Store previous position for collision response
+                sphere.previousPosition = sphere.position.clone();
+                
+                // Gravity towards center (horizontal attraction)
+                const horizontalVector = new THREE.Vector3(sphere.position.x, 0, sphere.position.z).negate().normalize();
+                sphere.velocity.add(horizontalVector.multiplyScalar(gravity));
+                
+                // Gravity (vertical)
+                sphere.velocity.add(sphere.acceleration);
+                
+                // Mouse repulsion
+                const mouse3D = new THREE.Vector3();
+                raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 0, 1), -sphere.position.z), mouse3D);
+                
+                const distance = sphere.position.distanceTo(mouse3D);
+                
+                if (distance < 3) {
+                    const repulsionVector = sphere.position.clone().sub(mouse3D).normalize();
+                    const repulsionStrength = repulsionForce / (distance + 0.01);
+                    sphere.velocity.add(repulsionVector.multiplyScalar(repulsionStrength));
+                }
+                
+                // Apply friction
+                sphere.velocity.multiplyScalar(friction);
+                
+                // Limit velocity
+                if (sphere.velocity.length() > maxVelocity) {
+                    sphere.velocity.normalize().multiplyScalar(maxVelocity);
+                }
+                
+                // Update position
+                sphere.position.add(sphere.velocity);
+                
+                // Handle ground collision
+                handleGroundCollision(sphere);
+                
+                // Add rotation based on velocity
+                sphere.rotation.x += sphere.velocity.length() * 0.2;
+                sphere.rotation.y += sphere.velocity.length() * 0.3;
+            });
+
+            // Check for sphere-to-sphere collisions
+            for (let i = 0; i < spheres.length; i++) {
+                for (let j = i + 1; j < spheres.length; j++) {
+                    handleSphereCollision(spheres[i], spheres[j]);
+                }
+            }
+        }
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            updatePhysics();
+            
+            renderer.render(scene, camera);
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Start animation
+        animate();
+
+        // Add some initial spheres
+        ['red', 'blue', 'yellow', 'green'].forEach((type, index) => {
+            createSphere(type);
+        });
+    </script>
+</body>
+</html>
